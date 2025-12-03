@@ -9,11 +9,20 @@ from losses.loss import SSIM
 import torch.distributed as dist
 
 calc_SSIM = SSIM(data_range=1.)
-
+"""
 def reduce_tensor(tensor, world_size):
     rt = tensor.clone()
     dist.all_reduce(rt, op=dist.ReduceOp.SUM)
     rt /= world_size
+    return rt
+"""
+def reduce_tensor(rt, world_size=1):
+    import torch.distributed as dist
+    # 仅在分布式初始化且为多卡时进行通信
+    if dist.is_initialized() and world_size > 1:
+        dist.all_reduce(rt, op=dist.ReduceOp.SUM)
+        rt = rt / world_size
+    # 单卡时直接返回原张量
     return rt
 
 def eval_one_loader(model, test_loader, metrics, local_rank=0, world_size = 1):
