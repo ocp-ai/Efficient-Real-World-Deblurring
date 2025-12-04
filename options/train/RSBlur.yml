@@ -17,13 +17,13 @@ datasets:
     verbose: True # whether to print the dataset information
     crop_type: Random # type of crop to be used (Random, Center). If cropsize not None, this parameter is used.
   val:
-    test_path: D:/2025_PROJECT/Dataset_WinnerStyle # test set path
+    test_path: D:/2025_PROJECT/Dataset_WinnerStyle # test(val) set path, same as train_path!
     batch_size_test: 1 # batch size for validation
 
 #### network structures
 network:
   name: NAFNet # name of the network used. Check create_model function for available names
-  resume_training: False # whether to resume training from a checkpoint
+  resume_training: False # whether to resume training from a checkpoint, if resume use True & also change below path_resume to the model
 
 #### network parameters, you may define the names that you want to use in the network. Unused keys will be ignored.
   img_channels: 3
@@ -78,14 +78,19 @@ train:
 #### save model
 save:
   path_resume:   # path to the checkpoint to resume training
-  path_save: ./models/My_Microscope_NAFNet-C16-L14.pt # path to save the model
+  path_save: ./models # path to save the model
+  name: My_Microscope_NAFNet_C16_L14
+  save_freq: 10  # Save every 10 epochs (matches eval_freq)
+  keep_last: 5   # Keep only last 5 checkpoints
+  save_best: true  # Also save best model separately
 
 
 # Logging
 logger:
   print_freq: 100
-  save_checkpoint_freq: 2000 # Save more often so you don't lose progress
+  save_checkpoint_freq: 1000 # Save more often so we don't lose progress
   use_tb_logger: true
+  log_dir: ./runs/      # TensorBoard logs here
 
 dist_params:
   backend: nccl

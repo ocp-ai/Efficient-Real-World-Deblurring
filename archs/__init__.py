@@ -97,10 +97,10 @@ def create_optim_scheduler(opt_train, model):
     betas = optim_config.get('betas', (0.9, 0.999))
     weight_decay = optim_config.get('weight_decay', 0)
 
-    # --- 2. 创建优化器 (使用Adam) ---
+    # --- 2. 创建优化器 (使用AdamW) ---
     # 注意：如果模型是DDP包装的，model.parameters() 会自动处理
-    optim = torch.optim.Adam(model.parameters(), lr=lr, betas=betas, weight_decay=weight_decay)
-
+    optim = torch.optim.AdamW(model.parameters(), lr=lr, betas=betas, weight_decay=weight_decay)
+    print (type(optim))
     # --- 3. 创建学习率调度器 ---
     scheduler_config = opt_train.get('scheduler', {})
     scheduler_type = scheduler_config.get('type', 'CosineAnnealingRestartLR')

@@ -308,7 +308,7 @@ def run_model():
                                                       train_loader, metrics_train,
                                                       local_rank=local_rank)
 
-            # ---------- 评估阶段 ----------
+            # ---------- 评估阶段 eval phase ----------
             eval_this_epoch = (epoch % opt['train']['eval_freq'] == 0) or (epoch == opt['train']['epochs'][step] - 1)
             if eval_this_epoch:
                 model.eval()
