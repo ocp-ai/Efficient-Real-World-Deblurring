@@ -17,121 +17,62 @@ from tools.trainer import train_model
 from tools.tester import eval_model
 
 
-
+# Add this function near the top of train.py (after imports)
 def safe_save_checkpoint(model, optim, scheduler, metrics_eval, metrics_train, path, global_rank):
-    """
-    Save checkpoints in ORGANIZED structure with proper PSNR handling
-    """
+    """Save checkpoints in organized structure"""
     import os
     import torch
     import time
     
     if global_rank != 0:
-        return 0
+        return metrics_eval.get('valid_psnr', 0)
     
-    # DEBUG: Check what metrics_eval actually contains
-    print(f"\n🔍 DEBUG [safe_save_checkpoint]:")
-    print(f"  metrics_eval type: {type(metrics_eval)}")
-
-    # Handle nested metrics structure
-    psnr = 0
-    all_metrics = {}
-    
-    if isinstance(metrics_eval, dict):
-        print(f"  Top-level keys: {list(metrics_eval.keys())}")
-    
-        # Check if it's nested (multiple datasets)
-        if len(metrics_eval) > 0:
-            first_value = next(iter(metrics_eval.values()))
-            if isinstance(first_value, dict) and 'valid_psnr' in first_value:
-                print("  ↳ Detected nested metrics (multiple datasets)")
-                # Take average or first dataset's metrics
-                for dataset_name, dataset_metrics in metrics_eval.items():
-                    print(f"    {dataset_name}: PSNR={dataset_metrics.get('valid_psnr', 0):.4f}")
-                    all_metrics[dataset_name] = dataset_metrics
-                
-                # Use first dataset's PSNR (or average if you prefer)
-                first_dataset = next(iter(metrics_eval.values()))
-                psnr = first_dataset.get('valid_psnr', 0)
-                all_metrics = first_dataset  # Use first dataset's metrics
-            else:
-                # Not nested, use directly
-                print("  ↳ Flat metrics structure")
-                psnr = metrics_eval.get('valid_psnr', 0)
-                all_metrics = metrics_eval
-        
-    else:
-        print(f"  metrics_eval is not a dict: {metrics_eval}")
-        all_metrics = {}
-    
-       
-    epoch = metrics_train.get('epoch', 0) if isinstance(metrics_train, dict) else 0
+    epoch = metrics_train.get('epoch', 0)
+    psnr = metrics_eval.get('valid_psnr', 0)
     timestamp = time.strftime("%Y%m%d_%H%M%S")
     
-    print(f"  Using PSNR: {psnr:.4f} (Epoch: {epoch})")
-    
-    # ==================== ORGANIZED CHECKPOINT SAVING ====================
-    # Create base directory from path
-    if path.endswith(('.pt', '.pth')):
-        base_path = os.path.dirname(path)
-    else:
-        base_path = path
-    
+    # Ensure base directory exists
+    base_path = path if not path.endswith(('.pt', '.pth')) else os.path.dirname(path)
     if not base_path:
         base_path = "./checkpoints"
-    
-    print(f"  Base path: {base_path}")
-    
-    # Ensure base directory exists
     os.makedirs(base_path, exist_ok=True)
     
-    # ======= 1. Save to by_epoch/ folder (every 10 epochs) =======
-    if epoch % 10 == 0 or epoch == opt['train']['epochs'][step] - 1:
+    # 1. Save to by_epoch/ folder (every 10 epochs)
+    if epoch % 10 == 0 or epoch == metrics_train.get('total_epochs', 1000) - 1:
         epoch_dir = os.path.join(base_path, "by_epoch")
         os.makedirs(epoch_dir, exist_ok=True)
-        epoch_filename = f"epoch_{epoch:03d}_psnr_{psnr:.2f}.pt"
-        epoch_path = os.path.join(epoch_dir, epoch_filename)
+        epoch_path = os.path.join(epoch_dir, f"epoch_{epoch:03d}_psnr_{psnr:.2f}.pt")
         
-        checkpoint_data = {
+        torch.save({
             'epoch': epoch,
             'model_state_dict': model.state_dict(),
             'optimizer_state_dict': optim.state_dict(),
             'scheduler_state_dict': scheduler.state_dict() if scheduler else None,
-            'metrics_eval': all_metrics if isinstance(all_metrics, dict) else {},
-            'metrics_train': metrics_train if isinstance(metrics_train, dict) else {},
+            'metrics_eval': metrics_eval,
+            'metrics_train': metrics_train,
             'timestamp': timestamp,
-            'psnr': psnr,
-            'valid_psnr': psnr,  # Also save at root for easy access
-        }
+            'psnr': psnr
+        }, epoch_path)
         
-        # Add other metrics if available
-        if isinstance(metrics_eval, dict):
-            checkpoint_data['valid_ssim'] = all_metrics.get('valid_ssim', 0)
-            checkpoint_data['valid_lpips'] = all_metrics.get('valid_lpips', 0)
-        
-        torch.save(checkpoint_data, epoch_path)
-        print(f"📁 Saved epoch checkpoint: {epoch_filename}")
+        print(f"📁 Epoch checkpoint saved: {epoch_path}")
     
-    # ======= 2. Always save latest model =======
+    # 2. Save latest model
     latest_dir = os.path.join(base_path, "latest")
     os.makedirs(latest_dir, exist_ok=True)
     latest_path = os.path.join(latest_dir, "latest_checkpoint.pt")
     
-    checkpoint_data = {
+    torch.save({
         'epoch': epoch,
         'model_state_dict': model.state_dict(),
         'optimizer_state_dict': optim.state_dict(),
         'scheduler_state_dict': scheduler.state_dict() if scheduler else None,
-        'metrics_eval': all_metrics if isinstance(all_metrics, dict) else {},
-        'metrics_train': metrics_train if isinstance(metrics_train, dict) else {},
+        'metrics_eval': metrics_eval,
+        'metrics_train': metrics_train,
         'timestamp': timestamp,
-        'psnr': psnr,
-    }
+        'psnr': psnr
+    }, latest_path)
     
-    torch.save(checkpoint_data, latest_path)
-    print(f"📁 Updated latest checkpoint")
-    
-    # ======= 3. Track and save best model =======
+    # 3. Track and save best model
     best_dir = os.path.join(base_path, "best_models")
     os.makedirs(best_dir, exist_ok=True)
     
@@ -153,28 +94,21 @@ def safe_save_checkpoint(model, optim, scheduler, metrics_eval, metrics_train, p
             f.write(str(psnr))
         
         # Save best model
-        best_filename = f"best_psnr_{psnr:.2f}_epoch_{epoch}.pt"
-        best_path = os.path.join(best_dir, best_filename)
+        best_path = os.path.join(best_dir, f"best_psnr_{psnr:.2f}_epoch_{epoch}.pt")
+        torch.save({
+            'epoch': epoch,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optim.state_dict(),
+            'metrics_eval': metrics_eval,
+            'metrics_train': metrics_train,
+            'timestamp': timestamp,
+            'psnr': psnr,
+            'is_best': True
+        }, best_path)
         
-        checkpoint_data['is_best'] = True
-        torch.save(checkpoint_data, best_path)
-        
-        print(f"🏆 NEW BEST! PSNR: {psnr:.4f} (was: {best_psnr:.4f})")
-        print(f"   Saved as: {best_filename}")
-    
-    # Also save to original path for compatibility
-    original_path = path
-    if not original_path.endswith(('.pt', '.pth')):
-        original_path = original_path + '.pt'
-    
-    torch.save(checkpoint_data, original_path)
-    print(f"📁 Also saved to original path: {original_path}")
-    
-    print(f"✅ Checkpoint saved successfully! PSNR: {psnr:.4f}")
+        print(f"🏆 NEW BEST MODEL! PSNR: {psnr:.4f} saved to: {best_path}")
     
     return psnr
-
-
 def run_model(opt, PATH_RESUME, PATH_SAVE):
     """
     主训练函数，处理单卡/多卡初始化并启动训练循环。
