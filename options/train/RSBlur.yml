@@ -78,8 +78,8 @@ train:
 #### save model
 save:
   path_resume:   # path to the checkpoint to resume training
-  path_save: ./models # path to save the model
-  name: My_Microscope_NAFNet_C16_L14
+  path_save: ./checkpoints/latest/model.pt  # Latest checkpoint
+  #name: My_Microscope_NAFNet_C16_L14.pt
   save_freq: 10  # Save every 10 epochs (matches eval_freq)
   keep_last: 5   # Keep only last 5 checkpoints
   save_best: true  # Also save best model separately
@@ -88,7 +88,7 @@ save:
 # Logging
 logger:
   print_freq: 100
-  save_checkpoint_freq: 1000 # Save more often so we don't lose progress
+  save_checkpoint_freq: 1000  # Save every 1000 iterations
   use_tb_logger: true
   log_dir: ./runs/      # TensorBoard logs here
 
@@ -97,3 +97,9 @@ dist_params:
   port: 29500
 
 # use "python train.py -p options/train/RSBlur.yml" to start training
+# Checkpoint Configuration
+checkpoint_config:
+  save_every_n_epochs: 10
+  keep_best_n_models: 3
+  metrics_to_track: [psnr, ssim, lpips]
+  auto_cleanup: true
